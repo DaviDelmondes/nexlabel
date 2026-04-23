@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import ResetPasswordForm from './ResetPasswordForm'
 
 export default async function ResetPasswordPage({
@@ -7,6 +6,7 @@ export default async function ResetPasswordPage({
   searchParams: Promise<{ code?: string }>
 }) {
   const { code } = await searchParams
-  if (!code) redirect('/forgot-password')
+  // Não redireciona quando não há ?code — o client component
+  // trata o caso do token vir como #access_token= no hash da URL
   return <ResetPasswordForm code={code} />
 }
