@@ -5,32 +5,34 @@
 
 -- Tabela de perfis (espelho de auth.users)
 create table if not exists public.profiles (
-  id uuid references auth.users on delete cascade primary key,
-  email text,
-  plan_status text default 'inactive' not null, -- 'inactive' | 'pending' | 'active' | 'cancelled'
-  plan_type text default 'monthly' not null,    -- 'monthly' | 'annual'
+  id            uuid references auth.users on delete cascade primary key,
+  email         text,
+  plan_status   text default 'trial' not null,
+  -- 'trial' | 'active' | 'pending' | 'expired' | 'cancelled'
+  plan_type     text default 'monthly' not null,   -- 'monthly' | 'annual'
   subscription_id text,
-  created_at timestamptz default now() not null
+  trial_ends_at timestamptz default (now() + interval '7 days'),
+  created_at    timestamptz default now() not null
 );
 
 -- Tabela de uploads de planilha
 create table if not exists public.uploads (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references public.profiles(id) on delete cascade not null,
-  filename text not null,
+  id            uuid default gen_random_uuid() primary key,
+  user_id       uuid references public.profiles(id) on delete cascade not null,
+  filename      text not null,
   product_count integer default 0 not null,
-  created_at timestamptz default now() not null
+  created_at    timestamptz default now() not null
 );
 
 -- Tabela de produtos extraídos da planilha
 create table if not exists public.products (
-  id uuid default gen_random_uuid() primary key,
-  upload_id uuid references public.uploads(id) on delete cascade not null,
-  user_id uuid references public.profiles(id) on delete cascade not null,
-  code text not null,
+  id          uuid default gen_random_uuid() primary key,
+  upload_id   uuid references public.uploads(id) on delete cascade not null,
+  user_id     uuid references public.profiles(id) on delete cascade not null,
+  code        text not null,
   description text,
   qr_data_url text not null,
-  created_at timestamptz default now() not null
+  created_at  timestamptz default now() not null
 );
 
 -- =============================================
@@ -38,8 +40,8 @@ create table if not exists public.products (
 -- =============================================
 
 alter table public.profiles enable row level security;
-alter table public.uploads enable row level security;
-alter table public.products enable row level security;
+alter table public.uploads   enable row level security;
+alter table public.products  enable row level security;
 
 -- Políticas para profiles
 create policy "Usuário vê próprio perfil"
@@ -49,6 +51,10 @@ create policy "Usuário vê próprio perfil"
 create policy "Usuário atualiza próprio perfil"
   on public.profiles for update
   using (auth.uid() = id);
+
+create policy "Sistema cria perfil no signup"
+  on public.profiles for insert
+  with check (true);
 
 -- Políticas para uploads
 create policy "Usuário vê próprios uploads"
@@ -77,14 +83,19 @@ create policy "Usuário deleta próprios produtos"
   using (auth.uid() = user_id);
 
 -- =============================================
--- Trigger: cria perfil automaticamente no signup
+-- Trigger: cria perfil com trial ao fazer signup
 -- =============================================
 
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email)
-  values (new.id, new.email);
+  insert into public.profiles (id, email, plan_status, trial_ends_at)
+  values (
+    new.id,
+    new.email,
+    'trial',
+    now() + interval '7 days'
+  );
   return new;
 end;
 $$ language plpgsql security definer;
@@ -95,15 +106,30 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 -- =============================================
--- Função RPC: atualiza status da assinatura via webhook do Mercado Pago
--- (security definer permite rodar sem service_role key)
+-- RPC: expira trial automaticamente se vencido
+-- Usada pelo dashboard layout a cada acesso
+-- =============================================
+
+create or replace function public.expire_trial_if_needed()
+returns void as $$
+begin
+  update public.profiles
+  set plan_status = 'expired'
+  where id            = auth.uid()
+    and plan_status   = 'trial'
+    and trial_ends_at < now();
+end;
+$$ language plpgsql security definer;
+
+-- =============================================
+-- RPC: atualiza status via webhook do Mercado Pago
 -- =============================================
 
 create or replace function public.update_subscription_status(
   p_external_reference uuid,
-  p_subscription_id text,
-  p_status text,
-  p_plan_type text
+  p_subscription_id    text,
+  p_status             text,
+  p_plan_type          text
 )
 returns void as $$
 begin
@@ -115,8 +141,3 @@ begin
   where id = p_external_reference;
 end;
 $$ language plpgsql security definer;
-
--- Política para o trigger inserir perfis (necessário para handle_new_user)
-create policy "Sistema cria perfil no signup"
-  on public.profiles for insert
-  with check (true);

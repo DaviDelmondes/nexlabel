@@ -25,9 +25,19 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-
   const pathname = request.nextUrl.pathname
+
+  // Não processa a própria página de manutenção para evitar loop
+  if (pathname === '/maintenance') return supabaseResponse
+
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    // Supabase inacessível — redireciona para manutenção
+    return NextResponse.redirect(new URL('/maintenance', request.url))
+  }
 
   const isProtected =
     pathname.startsWith('/dashboard') ||

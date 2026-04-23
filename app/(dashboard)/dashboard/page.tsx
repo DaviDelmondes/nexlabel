@@ -15,11 +15,15 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_status')
+    .select('plan_status, trial_ends_at')
     .eq('id', user!.id)
     .single()
 
-  const hasActiveSubscription = profile?.plan_status === 'active'
+  // Trial ativo OU assinatura paga → pode usar o app
+  const trialEndsAt = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null
+  const hasActiveSubscription =
+    profile?.plan_status === 'active' ||
+    (profile?.plan_status === 'trial' && !!trialEndsAt && trialEndsAt > new Date())
 
   return (
     <div className="space-y-8">

@@ -16,11 +16,17 @@ export default async function SubscribePage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_status, plan_type, subscription_id')
+    .select('plan_status, plan_type, subscription_id, trial_ends_at')
     .eq('id', user.id)
     .single()
 
   const { success } = await searchParams
+
+  const now = new Date()
+  const trialEndsAt = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null
+  const isTrialExpired = profile?.plan_status === 'expired' ||
+    (profile?.plan_status === 'trial' && (!trialEndsAt || trialEndsAt <= now))
+  const isOnActiveTrial = profile?.plan_status === 'trial' && trialEndsAt && trialEndsAt > now
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -42,7 +48,7 @@ export default async function SubscribePage({
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
 
-          {/* Assinatura ativa */}
+          {/* Assinatura já ativa */}
           {profile?.plan_status === 'active' ? (
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto">
@@ -64,10 +70,30 @@ export default async function SubscribePage({
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Aguardando confirmação do pagamento */}
+              {/* Pagamento recebido aguardando confirmação */}
               {success === 'true' && (
                 <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm text-center">
                   Pagamento recebido! Aguardando confirmação do Mercado Pago (pode levar alguns minutos).
+                </div>
+              )}
+
+              {/* Trial expirado */}
+              {isTrialExpired && (
+                <div className="px-4 py-4 rounded-xl bg-red-500/10 border border-red-500/20 text-center space-y-1">
+                  <p className="text-red-300 font-semibold text-sm">Seu trial de 7 dias expirou</p>
+                  <p className="text-red-400/70 text-xs">
+                    Assine um plano para continuar usando o Nexlabel.
+                  </p>
+                </div>
+              )}
+
+              {/* Trial ativo — usuário veio por vontade própria */}
+              {isOnActiveTrial && !success && (
+                <div className="px-4 py-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center space-y-1">
+                  <p className="text-amber-300 font-semibold text-sm">Você está no período de trial</p>
+                  <p className="text-amber-400/70 text-xs">
+                    Aproveite enquanto pode — assine agora e não perca o acesso.
+                  </p>
                 </div>
               )}
 
@@ -95,7 +121,6 @@ export default async function SubscribePage({
                 ))}
               </ul>
 
-              {/* Seletor de planos */}
               <PlanSelector userId={user.id} />
             </div>
           )}

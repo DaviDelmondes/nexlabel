@@ -1,10 +1,40 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { signout } from '@/app/actions/auth'
+import TrialBanner from '@/app/components/TrialBanner'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+
+  // Busca perfil incluindo dados de trial
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan_status, trial_ends_at')
+    .eq('id', user!.id)
+    .single()
+
+  // Verifica se o trial expirou (compara no servidor para precisão)
+  const now = new Date()
+  const trialEndsAt = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null
+  const isTrialExpired =
+    profile?.plan_status === 'trial' && (!trialEndsAt || trialEndsAt <= now)
+
+  if (isTrialExpired) {
+    // Atualiza o DB e redireciona para assinar
+    await supabase.rpc('expire_trial_if_needed')
+    redirect('/subscribe')
+  }
+
+  const status = profile?.plan_status ?? 'expired'
+  const hasAccess = status === 'active' || status === 'trial' || status === 'pending'
+
+  if (!hasAccess) {
+    redirect('/subscribe')
+  }
+
+  const isOnActiveTrial = status === 'trial' && trialEndsAt && trialEndsAt > now
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -44,6 +74,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </div>
       </header>
+
+      {/* Banner de trial — aparece logo abaixo do header */}
+      {isOnActiveTrial && (
+        <TrialBanner trialEndsAt={trialEndsAt.toISOString()} />
+      )}
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-8">
         {children}

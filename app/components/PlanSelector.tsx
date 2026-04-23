@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import PixCheckout from './PixCheckout'
+import { fetchWithRetry } from '@/lib/fetchWithRetry'
 
 type Plan = 'monthly' | 'annual'
 type Method = 'card' | 'pix'
@@ -28,7 +29,7 @@ export default function PlanSelector({ userId }: { userId: string }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/subscribe', {
+      const res = await fetchWithRetry('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: selected }),
@@ -47,7 +48,7 @@ export default function PlanSelector({ userId }: { userId: string }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/pix', {
+      const res = await fetchWithRetry('/api/pix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: selected }),

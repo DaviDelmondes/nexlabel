@@ -11,6 +11,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
+  // Verifica acesso: trial ativo ou assinatura paga
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan_status, trial_ends_at')
+    .eq('id', user.id)
+    .single()
+
+  const trialEndsAt = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null
+  const hasAccess =
+    profile?.plan_status === 'active' ||
+    (profile?.plan_status === 'trial' && !!trialEndsAt && trialEndsAt > new Date())
+
+  if (!hasAccess) {
+    return NextResponse.json(
+      { error: 'Seu trial expirou. Assine um plano para continuar fazendo uploads.' },
+      { status: 403 }
+    )
+  }
+
   const formData = await request.formData()
   const file = formData.get('file') as File | null
 
