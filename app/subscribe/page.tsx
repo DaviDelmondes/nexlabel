@@ -96,7 +96,7 @@ export default async function SubscribePage({
               </ul>
 
               {/* Seletor de planos */}
-              <PlanSelector />
+              <PlanSelector userId={user.id} />
             </div>
           )}
         </div>
