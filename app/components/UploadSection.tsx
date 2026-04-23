@@ -156,7 +156,11 @@ export default function UploadSection({ hasActiveSubscription }: Props) {
               Ver detalhes →
             </a>
           </div>
-          <CodeDisplay products={result.products} />
+          <CodeDisplay
+              products={result.products}
+              uploadId={result.upload.id}
+              total={result.upload.product_count}
+            />
         </div>
       )}
     </div>

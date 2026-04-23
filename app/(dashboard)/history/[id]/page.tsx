@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import CodeDisplay from '@/app/components/CodeDisplay'
 
+const PAGE_SIZE = 200
+
 export default async function UploadDetailPage({
   params,
 }: {
@@ -20,11 +22,17 @@ export default async function UploadDetailPage({
 
   if (!upload) notFound()
 
-  const { data: products } = await supabase
+  // PROBLEMA 2 FIX: busca paginada com count exato
+  // Supabase limita 1000 linhas por padrão — usamos range() explícito
+  const { data: products, count } = await supabase
     .from('products')
-    .select('id, code, description, qr_data_url')
+    .select('id, code, description, qr_data_url', { count: 'exact' })
     .eq('upload_id', id)
     .order('created_at', { ascending: true })
+    .range(0, PAGE_SIZE - 1)
+
+  // Usa product_count do upload como fallback se count não vier
+  const total = count ?? upload.product_count
 
   return (
     <div className="space-y-6">
@@ -40,7 +48,7 @@ export default async function UploadDetailPage({
         <div>
           <h1 className="text-xl font-bold text-zinc-50 truncate">{upload.filename}</h1>
           <p className="text-zinc-500 text-xs mt-0.5">
-            {upload.product_count} produto{upload.product_count !== 1 ? 's' : ''} •{' '}
+            {total.toLocaleString('pt-BR')} produto{total !== 1 ? 's' : ''} •{' '}
             {new Date(upload.created_at).toLocaleString('pt-BR', {
               day: '2-digit',
               month: '2-digit',
@@ -53,7 +61,11 @@ export default async function UploadDetailPage({
       </div>
 
       {products && products.length > 0 ? (
-        <CodeDisplay products={products} />
+        <CodeDisplay
+          products={products}
+          uploadId={id}
+          total={total}
+        />
       ) : (
         <p className="text-zinc-500 text-sm text-center py-12">Nenhum produto neste upload.</p>
       )}

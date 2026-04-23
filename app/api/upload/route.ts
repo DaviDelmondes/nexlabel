@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx'
 import QRCode from 'qrcode'
 import { createClient } from '@/lib/supabase/server'
 
+const PREVIEW_SIZE = 200
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -11,7 +13,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  // Verifica acesso: trial ativo ou assinatura paga
+  // PROBLEMA 3 FIX: trial com trial_ends_at null (conta antes da migração)
+  // também tem acesso. Bloqueia apenas plan_status = 'expired'.
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan_status, trial_ends_at')
@@ -21,7 +24,8 @@ export async function POST(request: NextRequest) {
   const trialEndsAt = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null
   const hasAccess =
     profile?.plan_status === 'active' ||
-    (profile?.plan_status === 'trial' && !!trialEndsAt && trialEndsAt > new Date())
+    profile?.plan_status === 'pending' ||
+    (profile?.plan_status === 'trial' && (!trialEndsAt || trialEndsAt > new Date()))
 
   if (!hasAccess) {
     return NextResponse.json(
@@ -109,24 +113,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Nenhum código válido encontrado na planilha' }, { status: 400 })
   }
 
-  const { data: savedProducts, error: productsError } = await supabase
+  // PROBLEMA 2 FIX: insert separado do select para evitar o limite padrão de 1000 linhas
+  // do Supabase no insert().select()
+  const { error: productsError } = await supabase
     .from('products')
     .insert(products)
-    .select('id, code, description, qr_data_url')
 
   if (productsError) {
     await supabase.from('uploads').delete().eq('id', upload.id)
     return NextResponse.json({ error: 'Erro ao salvar produtos' }, { status: 500 })
   }
 
-  // Atualiza contagem real de produtos
+  // Atualiza contagem real
   await supabase
     .from('uploads')
     .update({ product_count: products.length })
     .eq('id', upload.id)
 
+  // Retorna preview dos primeiros PREVIEW_SIZE produtos
+  // O cliente pode carregar mais via Load More usando o uploadId
+  const { data: preview } = await supabase
+    .from('products')
+    .select('id, code, description, qr_data_url')
+    .eq('upload_id', upload.id)
+    .order('created_at', { ascending: true })
+    .range(0, PREVIEW_SIZE - 1)
+
   return NextResponse.json({
     upload: { id: upload.id, filename: upload.filename, product_count: products.length },
-    products: savedProducts,
+    products: preview ?? [],
   })
 }

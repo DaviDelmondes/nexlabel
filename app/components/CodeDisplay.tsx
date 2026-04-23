@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import QRGrid from './QRGrid'
 import BarcodeGrid from './BarcodeGrid'
+import { createClient } from '@/lib/supabase/client'
 
 type Product = {
   id: string
@@ -13,8 +14,41 @@ type Product = {
 
 type Mode = 'qr' | 'barcode'
 
-export default function CodeDisplay({ products }: { products: Product[] }) {
+const PAGE_SIZE = 200
+
+interface Props {
+  products: Product[]
+  /** Presente quando há mais produtos no banco além dos carregados */
+  uploadId?: string
+  total?: number
+}
+
+export default function CodeDisplay({ products: initial, uploadId, total = initial.length }: Props) {
   const [mode, setMode] = useState<Mode>('qr')
+  const [products, setProducts] = useState<Product[]>(initial)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const hasMore = !!uploadId && products.length < total
+
+  async function loadMore() {
+    if (!uploadId || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('products')
+        .select('id, code, description, qr_data_url')
+        .eq('upload_id', uploadId)
+        .order('created_at', { ascending: true })
+        .range(products.length, products.length + PAGE_SIZE - 1)
+
+      if (data && data.length > 0) {
+        setProducts((prev) => [...prev, ...data])
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -52,6 +86,35 @@ export default function CodeDisplay({ products }: { products: Product[] }) {
         <QRGrid products={products} />
       ) : (
         <BarcodeGrid products={products} />
+      )}
+
+      {/* Load More */}
+      {hasMore && (
+        <div className="flex flex-col items-center gap-2 pt-2">
+          <p className="text-xs text-zinc-500">
+            Exibindo {products.length.toLocaleString('pt-BR')} de {total.toLocaleString('pt-BR')} produtos
+          </p>
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-600 text-zinc-300 hover:text-zinc-50 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMore ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                Carregando...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                Carregar mais {Math.min(PAGE_SIZE, total - products.length).toLocaleString('pt-BR')} produtos
+              </>
+            )}
+          </button>
+        </div>
       )}
     </div>
   )
