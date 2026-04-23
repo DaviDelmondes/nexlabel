@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Confirme seu email — Nexlabel</title>
+  <style>
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; padding: 16px !important; }
+      .card { padding: 32px 24px !important; border-radius: 12px !important; }
+      .btn { display: block !important; width: 100% !important; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .outer { background-color: #09090b !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="outer" style="background-color:#f4f4f6;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table role="presentation" class="container" width="560" cellpadding="0" cellspacing="0" class="card" style="background-color:#18181b;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,0.4);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#4f0a9e 0%,#7c3aed 100%);padding:32px 40px 28px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 20px;">
+                <span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Nexlabel</span>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="card" style="padding:40px 40px 32px;">
+
+              <!-- Icon -->
+              <div style="text-align:center;margin-bottom:28px;">
+                <div style="display:inline-block;background:#3f3f46;border-radius:50%;width:56px;height:56px;line-height:56px;text-align:center;font-size:28px;">
+                  ✉️
+                </div>
+              </div>
+
+              <!-- Heading -->
+              <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#fafafa;text-align:center;letter-spacing:-0.3px;">
+                Confirme seu e-mail
+              </h1>
+              <p style="margin:0 0 28px;font-size:15px;color:#a1a1aa;text-align:center;line-height:1.6;">
+                Olá! Para ativar sua conta no <strong style="color:#d4d4d8;">Nexlabel</strong> e começar a gerar QR codes, clique no botão abaixo.
+              </p>
+
+              <!-- Button -->
+              <div style="text-align:center;margin-bottom:28px;">
+                <a href="{{ .ConfirmationURL }}" class="btn"
+                   style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 36px;border-radius:10px;letter-spacing:0.2px;">
+                  Confirmar e-mail
+                </a>
+              </div>
+
+              <!-- Fallback link -->
+              <p style="margin:0 0 8px;font-size:12px;color:#71717a;text-align:center;">
+                Se o botão não funcionar, copie e cole este link no navegador:
+              </p>
+              <p style="margin:0;text-align:center;">
+                <a href="{{ .ConfirmationURL }}" style="font-size:11px;color:#7c3aed;word-break:break-all;">
+                  {{ .ConfirmationURL }}
+                </a>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding:0 40px;">
+              <div style="border-top:1px solid #27272a;"></div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px 32px;">
+              <p style="margin:0 0 6px;font-size:12px;color:#52525b;text-align:center;">
+                Este link expira em <strong style="color:#71717a;">24 horas</strong>. Se você não criou uma conta no Nexlabel, ignore este e-mail.
+              </p>
+              <p style="margin:0;font-size:12px;color:#3f3f46;text-align:center;">
+                © 2025 Nexlabel · Todos os direitos reservados
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
