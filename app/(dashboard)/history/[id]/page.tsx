@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import QRGrid from '@/app/components/QRGrid'
+import CodeDisplay from '@/app/components/CodeDisplay'
 
 export default async function UploadDetailPage({
   params,
@@ -53,7 +53,7 @@ export default async function UploadDetailPage({
       </div>
 
       {products && products.length > 0 ? (
-        <QRGrid products={products} />
+        <CodeDisplay products={products} />
       ) : (
         <p className="text-zinc-500 text-sm text-center py-12">Nenhum produto neste upload.</p>
       )}

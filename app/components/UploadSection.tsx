@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
-import QRGrid from './QRGrid'
+import CodeDisplay from './CodeDisplay'
 
 type Product = {
   id: string
@@ -149,14 +149,14 @@ export default function UploadSection({ hasActiveSubscription }: Props) {
             <div>
               <p className="text-sm font-medium text-zinc-200">{result.upload.filename}</p>
               <p className="text-xs text-zinc-500 mt-0.5">
-                {result.upload.product_count} QR code{result.upload.product_count !== 1 ? 's' : ''} gerado{result.upload.product_count !== 1 ? 's' : ''}
+                {result.upload.product_count} produto{result.upload.product_count !== 1 ? 's' : ''} processado{result.upload.product_count !== 1 ? 's' : ''}
               </p>
             </div>
             <a href={`/history/${result.upload.id}`} className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
               Ver detalhes →
             </a>
           </div>
-          <QRGrid products={result.products} />
+          <CodeDisplay products={result.products} />
         </div>
       )}
     </div>
