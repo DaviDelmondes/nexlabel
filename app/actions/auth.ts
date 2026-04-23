@@ -54,8 +54,10 @@ export async function forgotPassword(prevState: ForgotState, formData: FormData)
   const supabase = await createClient()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
+  // Usa /api/auth/callback como intermediário para trocar o code por sessão (PKCE)
+  // ou para preservar o hash no redirect (fluxo implícito)
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appUrl}/reset-password`,
+    redirectTo: `${appUrl}/api/auth/callback?next=/reset-password`,
   })
 
   if (error) return { error: error.message }

@@ -1,84 +1,91 @@
 'use client'
 
-import { useEffect, useState, useActionState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { resetPassword } from '@/app/actions/auth'
 import { createClient } from '@/lib/supabase/client'
 
-// Fluxo PKCE  → Supabase envia ?code=xxx na URL (query string)
-// Fluxo implícito → Supabase envia #access_token=xxx no hash da URL
-type Flow = 'detecting' | 'code' | 'hash' | 'invalid'
+type Status = 'loading' | 'ready' | 'invalid'
 
-interface Props {
-  /** Presente quando Supabase usou fluxo PKCE (?code=) */
-  code?: string
-}
-
-export default function ResetPasswordForm({ code }: Props) {
+export default function ResetPasswordForm() {
   const router = useRouter()
-
-  // --- Fluxo PKCE (server action) ---
-  const [codeState, codeAction, codePending] = useActionState(resetPassword, null)
-
-  // --- Fluxo implícito (hash) ---
-  const [flow, setFlow] = useState<Flow>(code ? 'code' : 'detecting')
-  const [hashError, setHashError] = useState<string | null>(null)
-  const [hashPending, setHashPending] = useState(false)
+  const [status, setStatus] = useState<Status>('loading')
+  const [formError, setFormError] = useState<string | null>(null)
+  const [invalidReason, setInvalidReason] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
 
   useEffect(() => {
-    if (code) return // PKCE já detectado no server, skip
-
-    const raw = window.location.hash.slice(1) // remove o "#"
-    if (!raw) {
-      setFlow('invalid')
-      return
-    }
-
-    const params = new URLSearchParams(raw)
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token') ?? ''
-    const type = params.get('type')
-
-    if (!accessToken || type !== 'recovery') {
-      setFlow('invalid')
-      return
-    }
-
-    // Estabelece a sessão com os tokens do hash
     const supabase = createClient()
-    supabase.auth
-      .setSession({ access_token: accessToken, refresh_token: refreshToken })
-      .then(({ error }) => {
-        if (error) {
-          setHashError('Link inválido ou expirado. Solicite um novo.')
-          setFlow('invalid')
-        } else {
-          setFlow('hash')
-        }
-      })
-  }, [code])
 
-  async function handleHashSubmit(e: React.FormEvent<HTMLFormElement>) {
+    async function init() {
+      // ── Caso 1: Fluxo PKCE ───────────────────────────────────────────────
+      // O /api/auth/callback já fez exchangeCodeForSession e gravou a sessão
+      // nos cookies. O browser client consegue lê-la direto.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setStatus('ready')
+        return
+      }
+
+      // ── Caso 2: Fluxo implícito ──────────────────────────────────────────
+      // O Supabase redirecionou com #access_token=xxx na URL.
+      // O hash NÃO é enviado ao servidor, mas está disponível no browser.
+      const hash = window.location.hash.slice(1) // remove o "#"
+      if (!hash) {
+        setInvalidReason('Link inválido ou sem token. Solicite um novo.')
+        setStatus('invalid')
+        return
+      }
+
+      const params = new URLSearchParams(hash)
+      const accessToken = params.get('access_token')
+      const refreshToken = params.get('refresh_token') ?? ''
+      const type = params.get('type')
+
+      if (!accessToken || type !== 'recovery') {
+        setInvalidReason('Link inválido para redefinição de senha.')
+        setStatus('invalid')
+        return
+      }
+
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      })
+
+      if (error) {
+        setInvalidReason('Link expirado. Solicite um novo link de redefinição.')
+        setStatus('invalid')
+      } else {
+        setStatus('ready')
+      }
+    }
+
+    init()
+  }, [])
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setHashPending(true)
-    setHashError(null)
+    setPending(true)
+    setFormError(null)
 
     const password = (new FormData(e.currentTarget)).get('password') as string
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({ password })
 
     if (error) {
-      setHashError(error.message)
-      setHashPending(false)
-    } else {
-      await supabase.auth.signOut()
-      router.push('/login?reset=true')
+      setFormError(error.message)
+      setPending(false)
+      return
     }
+
+    // Encerra a sessão de recovery para que o usuário faça login normalmente
+    await supabase.auth.signOut()
+    router.push('/login?reset=true')
   }
 
-  // ── Detectando tipo de fluxo ──────────────────────────────────────────────
-  if (flow === 'detecting') {
+  // ── Verificando ────────────────────────────────────────────────────────────
+  if (status === 'loading') {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl flex items-center justify-center gap-3 min-h-[160px]">
         <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
@@ -88,7 +95,7 @@ export default function ResetPasswordForm({ code }: Props) {
   }
 
   // ── Link inválido / expirado ───────────────────────────────────────────────
-  if (flow === 'invalid') {
+  if (status === 'invalid') {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl text-center space-y-4">
         <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto">
@@ -99,7 +106,7 @@ export default function ResetPasswordForm({ code }: Props) {
         <div>
           <h2 className="text-lg font-semibold text-zinc-50">Link inválido ou expirado</h2>
           <p className="text-zinc-500 text-sm mt-1">
-            {hashError ?? 'Solicite um novo link de redefinição de senha.'}
+            {invalidReason ?? 'Solicite um novo link de redefinição de senha.'}
           </p>
         </div>
         <Link
@@ -112,64 +119,43 @@ export default function ResetPasswordForm({ code }: Props) {
     )
   }
 
-  // ── Formulário compartilhado (PKCE ou hash) ────────────────────────────────
-  const error = flow === 'code' ? codeState?.error : hashError
-  const pending = flow === 'code' ? codePending : hashPending
-
-  const fields = (
-    <div className="space-y-4">
-      <div>
-        <label htmlFor="password" className="block text-sm font-medium text-zinc-300 mb-1.5">
-          Nova senha
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="new-password"
-          placeholder="Mínimo 6 caracteres"
-          minLength={6}
-          className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-50 placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors text-sm"
-        />
-      </div>
-
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full py-2.5 px-4 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm transition-colors"
-      >
-        {pending ? 'Salvando...' : 'Salvar nova senha'}
-      </button>
-    </div>
-  )
-
+  // ── Formulário ─────────────────────────────────────────────────────────────
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl">
       <h2 className="text-xl font-semibold text-zinc-50 mb-1">Nova senha</h2>
       <p className="text-zinc-500 text-sm mb-6">Escolha uma nova senha para sua conta.</p>
 
-      {error && (
+      {formError && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-          {error}{' '}
-          {error.includes('expirado') && (
-            <Link href="/forgot-password" className="underline font-medium">
-              Solicitar novo link
-            </Link>
-          )}
+          {formError}
         </div>
       )}
 
-      {flow === 'code' ? (
-        <form action={codeAction}>
-          <input type="hidden" name="code" value={code} />
-          {fields}
-        </form>
-      ) : (
-        <form onSubmit={handleHashSubmit}>
-          {fields}
-        </form>
-      )}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-zinc-300 mb-1.5">
+            Nova senha
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="new-password"
+            placeholder="Mínimo 6 caracteres"
+            minLength={6}
+            className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-50 placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors text-sm"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-full py-2.5 px-4 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm transition-colors"
+        >
+          {pending ? 'Salvando...' : 'Salvar nova senha'}
+        </button>
+      </form>
     </div>
   )
 }
