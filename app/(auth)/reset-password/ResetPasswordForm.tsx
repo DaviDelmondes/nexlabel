@@ -11,6 +11,7 @@ export default function ResetPasswordForm() {
   const router = useRouter()
   const [status, setStatus] = useState<Status>('loading')
   const [formError, setFormError] = useState<string | null>(null)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
   const [invalidReason, setInvalidReason] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
@@ -66,10 +67,19 @@ export default function ResetPasswordForm() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setPending(true)
     setFormError(null)
+    setConfirmError(null)
 
-    const password = (new FormData(e.currentTarget)).get('password') as string
+    const form = e.currentTarget
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value
+    const confirm  = (form.elements.namedItem('confirm')  as HTMLInputElement).value
+
+    if (password !== confirm) {
+      setConfirmError('As senhas não coincidem')
+      return
+    }
+
+    setPending(true)
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({ password })
 
@@ -144,8 +154,34 @@ export default function ResetPasswordForm() {
             autoComplete="new-password"
             placeholder="Mínimo 6 caracteres"
             minLength={6}
+            onChange={() => setConfirmError(null)}
             className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-50 placeholder-zinc-600 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors text-sm"
           />
+        </div>
+
+        <div>
+          <label htmlFor="confirm" className="block text-sm font-medium text-zinc-300 mb-1.5">
+            Confirmar nova senha
+          </label>
+          <input
+            id="confirm"
+            name="confirm"
+            type="password"
+            required
+            autoComplete="new-password"
+            placeholder="Repita a nova senha"
+            minLength={6}
+            onChange={() => setConfirmError(null)}
+            className={[
+              'w-full px-4 py-2.5 rounded-lg bg-zinc-800 border text-zinc-50 placeholder-zinc-600 focus:outline-none focus:ring-1 transition-colors text-sm',
+              confirmError
+                ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                : 'border-zinc-700 focus:border-violet-500 focus:ring-violet-500',
+            ].join(' ')}
+          />
+          {confirmError && (
+            <p className="mt-1.5 text-xs text-red-400">{confirmError}</p>
+          )}
         </div>
 
         <button
