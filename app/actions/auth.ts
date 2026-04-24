@@ -29,6 +29,11 @@ export async function signup(prevState: AuthState, formData: FormData): Promise<
   const { data, error } = await supabase.auth.signUp({
     email,
     password: formData.get('password') as string,
+    options: {
+      // Sem emailRedirectTo → Supabase usa o template sem link de redirect,
+      // permitindo que o template mostre apenas o OTP {{ .Token }}
+      emailRedirectTo: undefined,
+    },
   })
 
   if (error) return { error: error.message }
