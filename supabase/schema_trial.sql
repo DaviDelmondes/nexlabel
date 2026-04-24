@@ -1,56 +1,112 @@
 -- =============================================
 -- Nexlabel - Migração: Sistema de Trial de 7 dias
--- Execute no Supabase SQL Editor SE já tiver
--- rodado o schema.sql anterior (sem trial).
+-- + Fix: constraint profiles_plan_status_check
+--
+-- Execute no Supabase SQL Editor.
 -- Seguro para rodar múltiplas vezes (idempotente).
 -- =============================================
 
--- 1. Adiciona coluna trial_ends_at (se não existir)
-alter table public.profiles
-  add column if not exists trial_ends_at timestamptz;
 
--- 2. Muda o default de novas linhas
-alter table public.profiles
-  alter column plan_status set default 'trial';
+-- ── Passo 1: Remover constraint antiga ───────────────────
+-- A constraint original não incluía 'trial' nem 'expired'.
+ALTER TABLE public.profiles
+  DROP CONSTRAINT IF EXISTS profiles_plan_status_check;
 
--- 3. PROBLEMA 1 — Contas antigas sem plano ativo recebem trial de 7 dias a partir de agora
---    Afeta: 'inactive', 'pending', 'cancelled', 'expired', NULL
---    NÃO afeta: plan_status = 'active' (assinantes pagos ficam como estão)
-update public.profiles
-set
+
+-- ── Passo 2: Adicionar coluna trial_ends_at ──────────────
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+
+
+-- ── Passo 3: Nova constraint com todos os valores ────────
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_plan_status_check
+  CHECK (plan_status IN (
+    'trial',
+    'active',
+    'pending',
+    'expired',
+    'cancelled',
+    'inactive'
+  ));
+
+
+-- ── Passo 4: Atualizar default do plan_status ────────────
+ALTER TABLE public.profiles
+  ALTER COLUMN plan_status SET DEFAULT 'trial';
+
+
+-- ── Passo 5: Corrigir contas existentes sem trial ────────
+-- Usuários já cadastrados (inactive, pending, etc.)
+-- recebem 7 dias de trial a partir de agora.
+-- Assinantes ativos (active) não são afetados.
+UPDATE public.profiles
+SET
   plan_status   = 'trial',
   trial_ends_at = now() + interval '7 days'
-where plan_status not in ('active')
-   or plan_status is null;
+WHERE plan_status NOT IN ('active')
+   OR plan_status IS NULL;
 
--- 4. Atualiza trigger para novos signups receberem trial automaticamente
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, email, plan_status, trial_ends_at)
-  values (
+
+-- ── Passo 6: Recriar handle_new_user com trial ───────────
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, plan_status, trial_ends_at)
+  VALUES (
     new.id,
     new.email,
     'trial',
     now() + interval '7 days'
   );
-  return new;
-end;
-$$ language plpgsql security definer;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 5. Cria (ou recria) a função que expira trials vencidos
-create or replace function public.expire_trial_if_needed()
-returns void as $$
-begin
-  update public.profiles
-  set plan_status = 'expired'
-  where id            = auth.uid()
-    and plan_status   = 'trial'
-    and trial_ends_at < now();
-end;
-$$ language plpgsql security definer;
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+
+-- ── Passo 7: Recriar expire_trial_if_needed ──────────────
+CREATE OR REPLACE FUNCTION public.expire_trial_if_needed()
+RETURNS void AS $$
+BEGIN
+  UPDATE public.profiles
+  SET plan_status = 'expired'
+  WHERE id            = auth.uid()
+    AND plan_status   = 'trial'
+    AND trial_ends_at < now();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- =============================================
--- Verificação: veja o resultado após rodar
+-- VERIFICAÇÃO — rode após os passos acima
 -- =============================================
--- select id, email, plan_status, trial_ends_at from profiles order by created_at desc limit 20;
+
+-- 1. Confirmar a nova constraint:
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'public.profiles'::regclass
+  AND contype = 'c';
+
+-- Resultado esperado:
+-- profiles_plan_status_check | CHECK (plan_status IN ('trial','active',...))
+
+
+-- 2. Confirmar colunas da tabela:
+SELECT column_name, data_type, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name   = 'profiles'
+ORDER BY ordinal_position;
+
+
+-- 3. Ver usuários e seus status:
+SELECT id, email, plan_status, trial_ends_at
+FROM public.profiles
+ORDER BY created_at DESC
+LIMIT 10;
