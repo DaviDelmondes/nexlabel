@@ -10,6 +10,14 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: 'Nexlabel',
   description: 'Geração de QR codes a partir de planilhas Excel',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '48x48 32x32 16x16', type: 'image/x-icon' },
+      { url: '/icon.png',    sizes: '512x512',            type: 'image/png' },
+    ],
+    shortcut: '/favicon.ico',
+    apple:    '/icon.png',
+  },
 }
 
 export default function RootLayout({
