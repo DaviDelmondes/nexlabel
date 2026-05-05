@@ -56,17 +56,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Planilha está vazia' }, { status: 400 })
   }
 
-  // Detecta colunas de código e descrição (case-insensitive)
+  // Detecta colunas de código e descrição (case-insensitive, sem acentos, parcial)
   const firstRow = rows[0]
   const keys = Object.keys(firstRow)
 
-  const codeKey = keys.find(k =>
-    /^(cod|code|codigo|código|sku|ref|referencia|referência|id)$/i.test(k)
-  ) ?? keys[0]
+  // Normaliza: minúsculas + remove acentos + trim
+  const norm = (s: string) =>
+    s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
-  const descKey = keys.find(k =>
-    /^(desc|descricao|descrição|description|nome|name|produto|product)$/i.test(k)
-  )
+  const codeKey =
+    // 1) match exato
+    keys.find(k => /^(cod|code|codigo|sku|ref|referencia|id|codprod|codproduto)$/.test(norm(k))) ??
+    // 2) começa com padrão de código
+    keys.find(k => /^(cod|sku|ref)/.test(norm(k))) ??
+    // 3) contém padrão de código
+    keys.find(k => /(cod|sku|ref)/.test(norm(k))) ??
+    keys[0]
+
+  const descKey =
+    // 1) match exato
+    keys.find(k => /^(desc|descricao|description|nome|name|produto|product)$/.test(norm(k))) ??
+    // 2) começa com padrão de descrição
+    keys.find(k => /^(desc|nome|name)/.test(norm(k))) ??
+    // 3) contém padrão de descrição (apenas se não for a mesma que codeKey)
+    keys.find(k => k !== codeKey && /(desc|nome|name|produto|product)/.test(norm(k)))
 
   // Cria registro de upload
   const { data: upload, error: uploadError } = await supabase
@@ -136,7 +149,7 @@ export async function POST(request: NextRequest) {
     .from('products')
     .select('id, code, description, qr_data_url')
     .eq('upload_id', upload.id)
-    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .range(0, PREVIEW_SIZE - 1)
 
   return NextResponse.json({

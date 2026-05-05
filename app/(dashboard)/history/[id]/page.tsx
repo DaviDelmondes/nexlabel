@@ -28,7 +28,7 @@ export default async function UploadDetailPage({
     .from('products')
     .select('id, code, description, qr_data_url', { count: 'exact' })
     .eq('upload_id', id)
-    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .range(0, PAGE_SIZE - 1)
 
   // Usa product_count do upload como fallback se count não vier

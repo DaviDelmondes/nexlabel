@@ -45,7 +45,7 @@ export default function CodeDisplay({ products: initial, uploadId, total = initi
           .from('products')
           .select('id, code, description, qr_data_url')
           .eq('upload_id', uploadId!)
-          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
           .range(from, to)
 
         if (cancelled) return
